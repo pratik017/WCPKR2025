@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WCPKR2025 Check-In</title>
+
+  <!-- Tailwind CSS -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Heroicons -->
+  <script src="https://unpkg.com/feather-icons"></script>
+
+  <!-- html5-qrcode for QR and barcode support -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 p-4 min-h-screen">
+  <div class="max-w-md mx-auto bg-gray-800 shadow-md rounded-xl p-6">
+
+    <!-- Logo + Title -->
+    <div class="flex items-center justify-center mb-6">
+      <img src="{{ url_for('static', filename='images/sample-logo.png') }}" alt="Logo" class="w-16 h-16 rounded-full mr-2 shadow-md">
+      <h1 class="text-2xl font-bold">WCPKR2025 Check-In</h1>
+    </div>
+
+    <!-- Section Selector -->
+    <label class="block text-sm font-medium mb-2">Select Section:</label>
+    <select id="section" class="w-full p-2 border border-gray-600 rounded mb-4 bg-gray-700 text-white">
+      <option value="registration">Registration</option>
+      <option value="breakfast">Breakfast</option>
+      <option value="lunch">Lunch</option>
+      <option value="beforeParty">Before Party</option>
+      <option value="afterParty">After Party</option>
+    </select>
+
+    <!-- Scanner -->
+    <div id="scanner-container" class="w-full h-64 border-2 border-dashed border-gray-600 rounded mb-6"></div>
+
+    <!-- Manual Entry Fallback -->
+    <div class="mb-6">
+      <label for="manual-entry" class="block mb-2 text-sm font-medium">Manual Attendee ID Entry:</label>
+      <div class="flex gap-2">
+        <input id="manual-entry" type="text" placeholder="Enter Attendee ID"
+               class="flex-1 p-2 rounded border border-gray-600 bg-gray-700 text-white" />
+        <button onclick="handleManualEntry()" class="bg-blue-600 hover:bg-blue-700 rounded px-4 text-white font-semibold">
+          Submit
+        </button>
+      </div>
+    </div>
+
+    <!-- Scan Result Feedback -->
+    <div id="result" class="hidden transition-all duration-300 rounded-lg p-4 text-center text-lg font-semibold"></div>
+  </div>
+
+  <script>
+    const resultDiv = document.getElementById("result");
+    const sectionSelect = document.getElementById("section");
+
+    function showMessage(msg, success = true) {
+      const icon = success
+        ? '<svg xmlns="http://www.w3.org/2000/svg" class="inline w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" class="inline w-6 h-6 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-12.728 12.728M5.636 5.636l12.728 12.728"/></svg>';
+
+      resultDiv.innerHTML = icon + msg;
+      resultDiv.className = success
+        ? "bg-green-600 text-white p-4 rounded-lg text-center font-semibold shadow-lg animate-pulse mt-2"
+        : "bg-red-600 text-white p-4 rounded-lg text-center font-semibold shadow-lg animate-shake mt-2";
+      resultDiv.classList.remove("hidden");
+
+      setTimeout(() => {
+        resultDiv.classList.add("hidden");
+        resultDiv.className = "";
+        resultDiv.innerHTML = "";
+      }, 1500);
+    }
+
+    function sendToServer(attendeeId, section) {
+      fetch("/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendeeId, section })
+      })
+      .then(res => res.json())
+      .then(data => {
+        showMessage((data.success ? "Success: " : "Error: ") + data.message, data.success);
+      })
+      .catch(() => showMessage("Error: Could not contact server", false));
+    }
+
+    function handleManualEntry() {
+      const attendeeId = document.getElementById("manual-entry").value.trim();
+      const section = sectionSelect.value;
+      if (attendeeId) {
+        sendToServer(attendeeId, section);
+      } else {
+        showMessage("Please enter an attendee ID.", false);
+      }
+    }
+
+    function startScanner() {
+  const scanner = new Html5Qrcode("scanner-container");
+  const config = { fps: 10 }; // Removed qrbox for no frame
+
+  scanner.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText, decodedResult) => {
+      const section = sectionSelect.value;
+      sendToServer(decodedText, section);
+      showMessage("Scanned: " + decodedText);
+
+      scanner.stop().then(() => {
+        setTimeout(() => startScanner(), 1000); // Reduced delay to 1 second
+      });
+    },
+    errorMessage => {
+      // Ignore scan errors (common for partial/invalid scans)
+    }
+  ).catch(err => {
+    showMessage("Error: Unable to start scanner", false);
+  });
+}
+
+
+    // Shake animation
+    const style = document.createElement("style");
+    style.innerHTML = `
+      @keyframes shake {
+        0% { transform: translateX(0); }
+        25% { transform: translateX(-5px); }
+        50% { transform: translateX(5px); }
+        75% { transform: translateX(-5px); }
+        100% { transform: translateX(0); }
+      }
+      .animate-shake {
+        animation: shake 0.5s;
+      }
+    `;
+    document.head.appendChild(style);
+
+    startScanner();
+  </script>
+</body>
+</html>
